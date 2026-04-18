@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Komyt Dashboard{% endblock %}
+
+{% block content %}
+<h1>Dashboard</h1>
+
+{% if tasks %}
+<div class="card">
+    <table>
+        <thead>
+            <tr>
+                <th>Ticket</th>
+                <th>Status</th>
+                <th>Branch</th>
+                <th>Tokens</th>
+                <th>Cost</th>
+                <th>PR</th>
+                <th>Updated</th>
+            </tr>
+        </thead>
+        <tbody id="task-table">
+            {% for task in tasks %}
+            <tr>
+                <td><a class="link" href="/task/{{ task.ticket_id }}">{{ task.title }}</a></td>
+                <td><span class="status status-{{ task.status }}">{{ task.status }}</span></td>
+                <td><code>{{ task.branch }}</code></td>
+                <td>{{ "{:,}".format(task.tokens) }}</td>
+                <td>${{ "%.4f"|format(task.cost) }}</td>
+                <td>
+                    {% if task.pr_url %}
+                    <a class="link" href="{{ task.pr_url }}" target="_blank">View PR</a>
+                    {% else %}—{% endif %}
+                </td>
+                <td>{{ task.updated_at }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="card empty">
+    <p>No tasks yet. Mention <code>@komyt</code> in a ticket to get started.</p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+const evtSource = new EventSource("/api/events");
+evtSource.addEventListener("task_update", function(e) {
+    location.reload();
+});
+</script>
+{% endblock %}

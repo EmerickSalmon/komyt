@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Komyt — Configuration{% endblock %}
+
+{% block content %}
+<h1>Configuration</h1>
+
+<div class="card">
+    <h2 style="font-size:16px; margin-bottom:12px; color:var(--text-muted);">General</h2>
+    <dl class="kv">
+        <dt>Max Parallel Tasks</dt>
+        <dd>{{ config.max_parallel_tasks }}</dd>
+        <dt>Log Level</dt>
+        <dd>{{ config.log_level }}</dd>
+        <dt>Data Directory</dt>
+        <dd><code>{{ config.data_dir }}</code></dd>
+    </dl>
+</div>
+
+<div class="card">
+    <h2 style="font-size:16px; margin-bottom:12px; color:var(--text-muted);">Trigger</h2>
+    <dl class="kv">
+        <dt>Keyword</dt>
+        <dd><code>{{ config.trigger.keyword }}</code></dd>
+        <dt>Case Sensitive</dt>
+        <dd>{{ config.trigger.case_sensitive }}</dd>
+    </dl>
+</div>
+
+<div class="card">
+    <h2 style="font-size:16px; margin-bottom:12px; color:var(--text-muted);">OpenCode</h2>
+    <dl class="kv">
+        <dt>Server URL</dt>
+        <dd><code>{{ config.opencode.server_url }}</code></dd>
+        <dt>Default Model</dt>
+        <dd>{{ config.opencode.default_model }}</dd>
+        <dt>Max Tokens / Task</dt>
+        <dd>{{ "{:,}".format(config.opencode.max_tokens_per_task) }}</dd>
+        <dt>Max Retries / Step</dt>
+        <dd>{{ config.opencode.max_retries_per_step }}</dd>
+    </dl>
+</div>
+
+<div class="card">
+    <h2 style="font-size:16px; margin-bottom:12px; color:var(--text-muted);">GitHub</h2>
+    <dl class="kv">
+        <dt>Default Org</dt>
+        <dd>{{ config.github.default_org or "(not set)" }}</dd>
+        <dt>Poll Interval</dt>
+        <dd>{{ config.github.poll_interval_seconds }}s</dd>
+        <dt>Labels Filter</dt>
+        <dd>{{ config.github.labels_filter | join(", ") or "(none)" }}</dd>
+    </dl>
+</div>
+
+<div class="card">
+    <h2 style="font-size:16px; margin-bottom:12px; color:var(--text-muted);">Docker</h2>
+    <dl class="kv">
+        <dt>Default Image</dt>
+        <dd><code>{{ config.docker.default_image }}</code></dd>
+        <dt>Memory Limit</dt>
+        <dd>{{ config.docker.memory_limit }}</dd>
+        <dt>CPU Limit</dt>
+        <dd>{{ config.docker.cpu_limit }}</dd>
+        <dt>Cleanup After</dt>
+        <dd>{{ config.docker.cleanup_after }}</dd>
+    </dl>
+</div>
+
+<div class="card">
+    <h2 style="font-size:16px; margin-bottom:12px; color:var(--text-muted);">Analysis</h2>
+    <dl class="kv">
+        <dt>Clarity Threshold</dt>
+        <dd>{{ config.analysis.clarity_threshold }}</dd>
+        <dt>Require Agent Instructions</dt>
+        <dd>{{ config.analysis.require_agent_instructions }}</dd>
+    </dl>
+</div>
+{% endblock %}

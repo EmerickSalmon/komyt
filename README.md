@@ -30,30 +30,51 @@ Komyt picks up tickets from your issue tracker, analyzes them, clones your repo 
 
 ### Installation
 
+#### Bash (Linux / macOS / Git Bash)
+
 ```bash
-# Clone the repository
 git clone https://github.com/EmerickSalmon/komyt.git
 cd komyt
-
-# Install in development mode
+python -m venv .venv
+source .venv/bin/activate
 pip install -e ".[dev]"
 
-# Copy and edit configuration
 cp komyt.example.toml komyt.toml
+# Edit komyt.toml with your settings
+```
+
+#### PowerShell (Windows)
+
+```powershell
+git clone https://github.com/EmerickSalmon/komyt.git
+cd komyt
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -e ".[dev]"
+
+Copy-Item komyt.example.toml komyt.toml
 # Edit komyt.toml with your settings
 ```
 
 ### Configuration
 
-```bash
-# Set your GitHub token
-export GITHUB_TOKEN="ghp_your_token_here"
+#### Bash
 
-# Start the OpenCode server
+```bash
+export GITHUB_TOKEN="ghp_your_token_here"
+opencode serve
+```
+
+#### PowerShell
+
+```powershell
+$env:GITHUB_TOKEN = "ghp_your_token_here"
 opencode serve
 ```
 
 ### Usage
+
+#### Bash
 
 ```bash
 # Process a single ticket
@@ -70,6 +91,31 @@ komyt status
 
 # Launch the web dashboard
 komyt gui
+
+# Show configuration
+komyt config
+```
+
+#### PowerShell
+
+```powershell
+# Process a single ticket
+python -m komyt run --ticket https://github.com/your-org/your-repo/issues/42
+
+# Analyze a ticket without developing (dry-run)
+python -m komyt analyze --ticket https://github.com/your-org/your-repo/issues/42
+
+# Start the daemon (automatic polling)
+python -m komyt start
+
+# Check task status
+python -m komyt status
+
+# Launch the web dashboard
+python -m komyt gui
+
+# Show configuration
+python -m komyt config
 ```
 
 ### How the `@komyt` trigger works
@@ -120,27 +166,28 @@ Ticket Source (GitHub Issues, Jira, ...)
 
 ## Development
 
+#### Bash
+
 ```bash
-# Install dev dependencies
 pip install -e ".[dev]"
+pytest -m unit           # unit tests
+pytest -m functional     # functional tests
+pytest -m e2e            # E2E tests (requires Docker + OpenCode)
+pytest                   # all tests
+ruff check .             # linter
+mypy src/                # type checker
+```
 
-# Run unit tests
-pytest -m unit
+#### PowerShell
 
-# Run functional tests
-pytest -m functional
-
-# Run E2E tests (requires Docker + OpenCode server)
-pytest -m e2e
-
-# Run all tests
-pytest
-
-# Run linter
-ruff check .
-
-# Run type checker
-mypy src/
+```powershell
+pip install -e ".[dev]"
+python -m pytest -m unit           # unit tests
+python -m pytest -m functional     # functional tests
+python -m pytest -m e2e            # E2E tests (requires Docker + OpenCode)
+python -m pytest                   # all tests
+ruff check .                       # linter
+mypy src/                          # type checker
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for more details.

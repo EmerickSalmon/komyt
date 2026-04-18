@@ -38,7 +38,8 @@ class GitHubConfig:
 
 @dataclass
 class DockerConfig:
-    default_image: str = "komyt-base:latest"
+    enabled: bool = True
+    default_image: str = "ubuntu:24.04"
     memory_limit: str = "4g"
     cpu_limit: int = 2
     cleanup_after: bool = True
@@ -143,6 +144,7 @@ def load_config(config_path: Path | None = None) -> KomytConfig:
 
     # Docker
     dk = raw.get("docker", {})
+    config.docker.enabled = dk.get("enabled", config.docker.enabled)
     config.docker.default_image = dk.get("default_image", config.docker.default_image)
     config.docker.memory_limit = dk.get("memory_limit", config.docker.memory_limit)
     config.docker.cpu_limit = dk.get("cpu_limit", config.docker.cpu_limit)
@@ -196,6 +198,7 @@ def save_config(config: KomytConfig, path: Path) -> None:
             "labels_filter": config.github.labels_filter,
         },
         "docker": {
+            "enabled": config.docker.enabled,
             "default_image": config.docker.default_image,
             "memory_limit": config.docker.memory_limit,
             "cpu_limit": config.docker.cpu_limit,

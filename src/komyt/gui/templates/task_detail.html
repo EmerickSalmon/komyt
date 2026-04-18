@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Task — {{ ticket_id }}{% endblock %}
+
+{% block content %}
+{% if task %}
+<h1>{{ task.title }}</h1>
+
+<div class="card">
+    <dl class="kv">
+        <dt>Ticket ID</dt>
+        <dd>{{ task.ticket_id }}</dd>
+
+        <dt>Status</dt>
+        <dd><span class="status status-{{ task.status }}">{{ task.status }}</span></dd>
+
+        <dt>Branch</dt>
+        <dd><code>{{ task.branch }}</code></dd>
+
+        {% if task.score is not none %}
+        <dt>Analysis Score</dt>
+        <dd>{{ task.score }}/100</dd>
+        {% endif %}
+
+        <dt>Tokens Used</dt>
+        <dd>{{ "{:,}".format(task.tokens) }}</dd>
+
+        <dt>Estimated Cost</dt>
+        <dd>${{ "%.4f"|format(task.cost) }}</dd>
+
+        <dt>Duration</dt>
+        <dd>{{ "%.0f"|format(task.duration) }}s</dd>
+
+        {% if task.pr_url %}
+        <dt>Pull Request</dt>
+        <dd><a class="link" href="{{ task.pr_url }}" target="_blank">{{ task.pr_url }}</a></dd>
+        {% endif %}
+
+        <dt>Last Updated</dt>
+        <dd>{{ task.updated_at }}</dd>
+    </dl>
+</div>
+
+<p><a class="link" href="/">&larr; Back to dashboard</a></p>
+{% else %}
+<div class="card empty">
+    <p>Task <code>{{ ticket_id }}</code> not found.</p>
+    <p><a class="link" href="/">&larr; Back to dashboard</a></p>
+</div>
+{% endif %}
+{% endblock %}
