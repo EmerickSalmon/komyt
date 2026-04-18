@@ -1,0 +1,42 @@
+# Komyt Configuration
+# Copy this file to komyt.toml and edit to your needs.
+
+[general]
+max_parallel_tasks = 3
+log_level = "info"                        # debug | info | warning | error
+data_dir = "~/.komyt"
+
+[trigger]
+keyword = "@komyt"                        # Trigger keyword in tickets
+case_sensitive = false
+
+[opencode]
+server_url = "http://localhost:54321"
+default_model = "claude-sonnet-4-6"
+max_tokens_per_task = 500000              # Token budget per ticket
+max_retries_per_step = 5
+
+[github]
+token = "${GITHUB_TOKEN}"                 # Environment variable
+default_org = ""
+poll_interval_seconds = 300
+labels_filter = []                        # Optional label filter (in addition to trigger)
+
+[docker]
+default_image = "komyt-base:latest"
+memory_limit = "4g"
+cpu_limit = 2
+cleanup_after = true
+
+[gui]
+enabled = true
+host = "127.0.0.1"
+port = 8420
+
+[analysis]
+clarity_threshold = 70
+require_agent_instructions = false        # true = reject if no AGENTS.md
+
+[notifications]
+webhook_url = ""
+notify_on = ["success", "failure", "needs_review"]

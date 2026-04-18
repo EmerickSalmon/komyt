@@ -1,0 +1,4 @@
+[
+  "tests/functional/test_config_loading.py::TestConfigRoundTrip::test_example_config_is_valid",
+  "tests/functional/test_config_loading.py::TestConfigRoundTrip::test_save_and_reload"
+]
