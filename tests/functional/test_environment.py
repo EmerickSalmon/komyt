@@ -84,7 +84,7 @@ class TestStackDetectionRealFiles:
         assert info.test_command == "pytest"
         assert info.lint_command == "ruff check ."
         assert info.package_manager == "pip"
-        assert info.docker_image == "python:3.12-slim"
+        assert info.docker_image == "komyt-python:latest"
 
     def test_node_nextjs_project(self, tmp_path: Path) -> None:
         pkg = {

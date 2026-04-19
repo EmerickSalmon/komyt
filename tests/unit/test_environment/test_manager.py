@@ -18,6 +18,7 @@ class FakeDockerClient:
     def __init__(self) -> None:
         self.containers: dict[str, bool] = {}
         self._next_id = 0
+        self.exec_history: list[tuple[str, str]] = []
 
     def create_container(self, **kwargs) -> str:  # type: ignore[no-untyped-def]
         self._next_id += 1
@@ -37,6 +38,7 @@ class FakeDockerClient:
     def exec_in_container(
         self, container_id: str, command: str, working_dir: str | None = None,
     ) -> ExecResult:
+        self.exec_history.append((container_id, command))
         return ExecResult(exit_code=0, stdout="ok", stderr="")
 
     def container_exists(self, container_id: str) -> bool:
@@ -127,6 +129,9 @@ class TestEnvironmentManager:
         assert env.language == "python"
         assert env.lint_command == "ruff check ."
         assert str(clone_target) in env.repo_path
+        ran_commands = " ".join(cmd for _, cmd in client.exec_history)
+        assert "ruff" in ran_commands
+        assert "pytest" in ran_commands
 
     async def test_setup_detects_agent_instructions(self, tmp_path: Path) -> None:
         source = tmp_path / "source"

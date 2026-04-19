@@ -89,7 +89,9 @@ class FakeOpenCodeBackend:
     def __init__(self) -> None:
         self.calls: list[str] = []
 
-    async def create_session(self, working_dir: str, model: str) -> str:
+    async def create_session(
+        self, working_dir: str, model: str, container_id: str = "",
+    ) -> str:
         return "session-func"
 
     async def send_message(self, session_id: str, message: str) -> CompletionResult:

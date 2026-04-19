@@ -27,7 +27,9 @@ class FakeBackend:
     def __init__(self, tokens_per_call: int = 100) -> None:
         self._tokens = tokens_per_call
 
-    async def create_session(self, working_dir: str, model: str) -> str:
+    async def create_session(
+        self, working_dir: str, model: str, container_id: str = "",
+    ) -> str:
         return "sess-001"
 
     async def send_message(self, session_id: str, message: str) -> CompletionResult:
@@ -141,6 +143,30 @@ class TestDevelopmentLoop:
 
         assert result.failed_count == 1
         assert result.steps[0].attempt == 3  # max_attempts
+
+    async def test_failed_step_commits_wip_and_continues(self, tmp_path: Path) -> None:
+        docker = FakeDockerManager(test_passes=False)
+        git_ops = _make_git_ops(tmp_path)
+        test_runner = TestRunner(docker=docker)  # type: ignore[arg-type]
+        backend = FakeBackend()
+        opencode = OpenCodeClient(backend=backend, max_tokens=100_000)
+        await opencode.start_session("/workspace")
+
+        (tmp_path / "attempt.py").write_text("# broken attempt\n")
+
+        loop = DevelopmentLoop(
+            opencode=opencode, docker=docker, git_ops=git_ops, test_runner=test_runner,  # type: ignore[arg-type]
+            stop_on_step_failure=False,
+        )
+
+        plan = _make_plan(steps=2)
+        result = await loop.run(plan, _make_env())
+
+        assert not result.aborted
+        assert result.failed_count == 2
+        assert result.steps[0].commit_sha, "WIP commit should be created on failure"
+        log = git_ops.get_log(max_count=5)
+        assert any("WIP" in line or "wip" in line for line in log)
 
     async def test_token_budget_abort(self, tmp_path: Path) -> None:
         docker = FakeDockerManager(test_passes=True)

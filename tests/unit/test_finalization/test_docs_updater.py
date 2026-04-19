@@ -21,7 +21,9 @@ from komyt.finalization.docs_updater import DocsUpdater
 
 
 class FakeBackend:
-    async def create_session(self, working_dir: str, model: str) -> str:
+    async def create_session(
+        self, working_dir: str, model: str, container_id: str = "",
+    ) -> str:
         return "sess"
 
     async def send_message(self, session_id: str, message: str) -> CompletionResult:

@@ -129,7 +129,7 @@ class TestDetectDockerImage:
     def test_python_image(self, tmp_path) -> None:
         (tmp_path / "pyproject.toml").write_text("[build-system]")
         info = detect_stack(tmp_path)
-        assert info.docker_image == "python:3.12-slim"
+        assert info.docker_image == "komyt-python:latest"
 
     def test_node_image(self, tmp_path) -> None:
         (tmp_path / "package.json").write_text('{"name": "app"}')

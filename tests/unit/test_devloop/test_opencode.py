@@ -22,7 +22,9 @@ class FakeBackend:
         self.sessions_created: list[tuple[str, str]] = []
         self.sessions_closed: list[str] = []
 
-    async def create_session(self, working_dir: str, model: str) -> str:
+    async def create_session(
+        self, working_dir: str, model: str, container_id: str = "",
+    ) -> str:
         self.sessions_created.append((working_dir, model))
         return "session-001"
 

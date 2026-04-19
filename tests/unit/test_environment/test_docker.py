@@ -32,13 +32,14 @@ class FakeDockerClient:
         nano_cpus: int | None = None,
         working_dir: str | None = None,
         detach: bool = True,
+        environment: dict | None = None,
     ) -> str:
         self._next_id += 1
         cid = f"container-{self._next_id:04d}"
         self.created.append({
             "id": cid, "image": image, "volumes": volumes,
             "mem_limit": mem_limit, "nano_cpus": nano_cpus,
-            "working_dir": working_dir,
+            "working_dir": working_dir, "environment": environment,
         })
         self.containers[cid] = False
         return cid
