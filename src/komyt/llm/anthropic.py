@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import os
 
 import httpx
 
 from komyt.core.config import OpenCodeConfig
+
+logger = logging.getLogger(__name__)
 
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 
@@ -34,6 +37,10 @@ class OpenAICompatibleClient:
         headers: dict[str, str] = {"content-type": "application/json"}
         if self._api_key:
             headers["Authorization"] = f"Bearer {self._api_key}"
+        logger.debug(
+            "OpenAI-compatible call -> %s (model=%s, prompt=%d chars)",
+            self._url, self._model, len(prompt),
+        )
         resp = await self._client.post(
             self._url,
             headers=headers,
@@ -45,7 +52,13 @@ class OpenAICompatibleClient:
         )
         resp.raise_for_status()
         data = resp.json()
-        return data["choices"][0]["message"]["content"]
+        content = data["choices"][0]["message"]["content"]
+        usage = data.get("usage", {})
+        logger.debug(
+            "OpenAI-compatible response: %d chars, usage=%s",
+            len(content), usage,
+        )
+        return content
 
     async def close(self) -> None:
         await self._client.aclose()
@@ -71,6 +84,9 @@ class AnthropicClient:
                 "ANTHROPIC_API_KEY is not set. "
                 "Set it via environment variable or komyt.toml."
             )
+        logger.debug(
+            "Anthropic call (model=%s, prompt=%d chars)", self._model, len(prompt),
+        )
         resp = await self._client.post(
             ANTHROPIC_API_URL,
             headers={
@@ -86,7 +102,11 @@ class AnthropicClient:
         )
         resp.raise_for_status()
         data = resp.json()
-        return data["content"][0]["text"]
+        text = data["content"][0]["text"]
+        logger.debug(
+            "Anthropic response: %d chars, usage=%s", len(text), data.get("usage", {}),
+        )
+        return text
 
     async def close(self) -> None:
         await self._client.aclose()

@@ -19,12 +19,60 @@ from komyt.core.config import DEFAULT_CONFIG_FILENAME, KomytConfig, load_config,
 
 app = typer.Typer(
     name="komyt",
-    help="Komyt — Automated ticket-to-PR development pipeline.",
+    help=(
+        "Komyt — Automated ticket-to-PR development pipeline.\n\n"
+        "Use -d/--debug (before the subcommand) to enable verbose logging "
+        "of the full pipeline: HTTP calls, LLM prompts and raw responses, "
+        "Docker exec, git operations, etc. Without --debug the effective "
+        "level is taken from komyt.toml (general.log_level, default 'info')."
+    ),
     no_args_is_help=True,
 )
 console = Console()
 
 HISTORY_FILE = Path.home() / ".komyt" / "history.json"
+
+_DEBUG = False
+
+
+def _setup_logging(level: str) -> None:
+    """Configure root logging with a RichHandler. Idempotent."""
+    resolved = getattr(logging, level.upper(), logging.INFO)
+    root = logging.getLogger()
+    root.setLevel(resolved)
+    for h in list(root.handlers):
+        if isinstance(h, RichHandler):
+            root.removeHandler(h)
+    handler = RichHandler(
+        console=console,
+        rich_tracebacks=True,
+        show_path=resolved <= logging.DEBUG,
+        markup=False,
+    )
+    handler.setLevel(resolved)
+    root.addHandler(handler)
+    # httpx is very chatty at DEBUG — keep it at INFO unless user explicitly wants it
+    if resolved > logging.DEBUG:
+        logging.getLogger("httpx").setLevel(logging.WARNING)
+        logging.getLogger("httpcore").setLevel(logging.WARNING)
+
+
+def _apply_logging(cfg: KomytConfig) -> None:
+    _setup_logging("DEBUG" if _DEBUG else cfg.log_level)
+
+
+@app.callback()
+def _main(
+    debug: bool = typer.Option(
+        False,
+        "--debug",
+        "-d",
+        help="Enable verbose DEBUG logs (overrides general.log_level from komyt.toml).",
+    ),
+) -> None:
+    """Komyt CLI entrypoint — parses global flags before any subcommand."""
+    global _DEBUG
+    _DEBUG = debug
 
 
 @app.command()
@@ -32,9 +80,15 @@ def run(
     ticket: str = typer.Option(..., "--ticket", "-t", help="Ticket URL to process"),
     config_path: str = typer.Option("", "--config", "-c", help="Path to komyt.toml"),
 ) -> None:
-    """Process a single ticket through the full pipeline."""
-    console.print(f"[bold green]Processing ticket:[/] {ticket}")
+    """Run the full ticket-to-PR pipeline on a single ticket URL.
+
+    Fetches the ticket, runs analysis (contract + clarity + plan), spins up
+    the dev environment, executes the dev loop and opens a PR. Combine with
+    -d/--debug for full pipeline tracing.
+    """
     cfg = _load_cfg(config_path)
+    _apply_logging(cfg)
+    console.print(f"[bold green]Processing ticket:[/] {ticket}")
     asyncio.run(_run_ticket(ticket, cfg))
 
 
@@ -43,9 +97,15 @@ def analyze(
     ticket: str = typer.Option(..., "--ticket", "-t", help="Ticket URL to analyze"),
     config_path: str = typer.Option("", "--config", "-c", help="Path to komyt.toml"),
 ) -> None:
-    """Analyze a ticket without running the dev loop (dry-run)."""
-    console.print(f"[bold blue]Analyzing ticket:[/] {ticket}")
+    """Analyze a ticket without running the dev loop (dry-run).
+
+    Runs contract extraction, clarity scoring and planning against the LLM,
+    then prints the result. No code is written, no container is started,
+    no PR is opened. Use -d/--debug to inspect raw LLM responses.
+    """
     cfg = _load_cfg(config_path)
+    _apply_logging(cfg)
+    console.print(f"[bold blue]Analyzing ticket:[/] {ticket}")
     asyncio.run(_analyze_ticket(ticket, cfg))
 
 
@@ -53,13 +113,20 @@ def analyze(
 def start(
     config_path: str = typer.Option("", "--config", "-c", help="Path to komyt.toml"),
 ) -> None:
-    """Start the Komyt daemon (polling + automatic processing)."""
+    """Start the Komyt daemon (poll GitHub and auto-process triggered tickets).
+
+    Polls every repo of `github.default_org` at `github.poll_interval_seconds`,
+    picks up tickets containing the trigger keyword (default '@komyt') and
+    runs the full pipeline on each. Ctrl+C to stop.
+    """
     cfg = _load_cfg(config_path)
+    _apply_logging(cfg)
     console.print(
         f"[bold yellow]Starting Komyt daemon...[/]\n"
         f"  Trigger: {cfg.trigger.keyword}\n"
         f"  Poll interval: {cfg.github.poll_interval_seconds}s\n"
-        f"  Model: {cfg.opencode.default_model}"
+        f"  Model: {cfg.opencode.default_model}\n"
+        f"  Log level: {'DEBUG (--debug)' if _DEBUG else cfg.log_level}"
     )
     asyncio.run(_daemon_loop(cfg))
 
@@ -68,7 +135,8 @@ def start(
 def status(
     config_path: str = typer.Option("", "--config", "-c", help="Path to komyt.toml"),
 ) -> None:
-    """Show the status of running and queued tasks."""
+    """Show currently active tasks (in-progress or developing)."""
+    _apply_logging(_load_cfg(config_path))
     history = _load_history()
     active = [r for r in history if r.get("status") in ("developing", "in_progress")]
 
@@ -91,7 +159,7 @@ def status(
 def history(
     limit: int = typer.Option(20, "--limit", "-n", help="Number of entries to show"),
 ) -> None:
-    """Show the history of processed tickets."""
+    """Show the history of processed tickets (most recent last)."""
     records = _load_history()
 
     if not records:
@@ -128,17 +196,23 @@ def history(
 def gui(
     config_path: str = typer.Option("", "--config", "-c", help="Path to komyt.toml"),
 ) -> None:
-    """Launch the local web dashboard."""
+    """Launch the local web dashboard (FastAPI + uvicorn).
+
+    Binds on gui.host:gui.port from komyt.toml. With -d/--debug, uvicorn
+    itself is bumped to debug level as well.
+    """
     import uvicorn
 
     from komyt.gui.app import create_app
 
     cfg = _load_cfg(config_path)
+    _apply_logging(cfg)
     console.print(
         f"[bold cyan]Starting Komyt GUI on http://{cfg.gui.host}:{cfg.gui.port} ...[/]"
     )
     web_app = create_app(config=cfg)
-    uvicorn.run(web_app, host=cfg.gui.host, port=cfg.gui.port, log_level="info")
+    uvicorn_level = "debug" if _DEBUG else "info"
+    uvicorn.run(web_app, host=cfg.gui.host, port=cfg.gui.port, log_level=uvicorn_level)
 
 
 @app.command("config")
@@ -146,9 +220,15 @@ def config_cmd(
     action: str = typer.Argument("show", help="Action: show | path"),
     config_path: str = typer.Option("", "--config", "-c", help="Path to komyt.toml"),
 ) -> None:
-    """Manage Komyt configuration."""
+    """Inspect the active komyt.toml configuration.
+
+    Actions:
+      show  — print the effective config as a table (default).
+      path  — print the resolved config file path.
+    """
     if action == "show":
         cfg = _load_cfg(config_path)
+        _apply_logging(cfg)
         table = Table(title="Komyt Configuration")
         table.add_column("Section", style="bold")
         table.add_column("Key")

@@ -86,8 +86,16 @@ class ContractExtractor:
             comments=comments_text,
         )
 
+        logger.debug("Contract extraction prompt (%d chars):\n%s", len(prompt), prompt)
         raw = await self._llm.complete(prompt)
-        data = _parse_json(raw)
+        logger.debug("Contract extraction raw LLM response (%d chars):\n%s", len(raw), raw)
+        try:
+            data = _parse_json(raw)
+        except json.JSONDecodeError:
+            logger.warning(
+                "Failed to parse LLM response as JSON. Full raw response:\n%s", raw
+            )
+            raise
         contract = _build_contract(data)
 
         filled = _get_filled_fields(contract)
