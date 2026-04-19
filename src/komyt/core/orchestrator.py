@@ -54,8 +54,10 @@ class Orchestrator:
         github_token = config.github.token
         if not config.docker.enabled:
             from komyt.environment.local import LocalEnvironmentManager
+            logger.info("Docker disabled — using local environment manager")
             self._env_manager = LocalEnvironmentManager(github_token=github_token)  # type: ignore[assignment]
         else:
+            logger.info("Docker enabled — using containerized environments")
             self._env_manager = EnvironmentManager(
                 docker_config=config.docker, docker_client=docker_client,
                 github_token=github_token,
@@ -65,13 +67,16 @@ class Orchestrator:
 
     async def process_ticket(self, ticket: TicketData) -> PipelineResult:
         start = time.monotonic()
-        logger.info("Pipeline started for ticket %s: %s", ticket.id, ticket.title)
+        logger.info("=" * 60)
+        logger.info("PIPELINE START — ticket %s: %s", ticket.id, ticket.title)
+        logger.info("=" * 60)
 
         # 1. Analysis
+        logger.info("[1/6] Analyzing ticket...")
         try:
             analysis_result = await self._analysis.analyze(ticket)
         except Exception as exc:
-            logger.error("Analysis failed: %s", exc)
+            logger.error("[1/6] Analysis failed: %s", exc)
             duration = time.monotonic() - start
             return PipelineResult(
                 ticket=ticket,
@@ -80,12 +85,20 @@ class Orchestrator:
                 error_summary=f"Analysis error: {exc}",
             )
 
+        logger.info(
+            "[1/6] Analysis complete — score: %d/100, status: %s",
+            analysis_result.validation.score,
+            analysis_result.validation.status.value,
+        )
+
         if analysis_result.plan is None:
             if analysis_result.feedback_comment:
+                logger.info("[1/6] Posting feedback comment on ticket")
                 await self._ticket_adapter.add_comment(
                     ticket.external_id, analysis_result.feedback_comment,
                 )
             duration = time.monotonic() - start
+            logger.info("[1/6] Pipeline stopped — ticket did not pass analysis (%.1fs)", duration)
             return PipelineResult(
                 ticket=ticket,
                 status=TaskStatus.WAITING_CLARIFICATION
@@ -95,13 +108,33 @@ class Orchestrator:
             )
 
         plan = analysis_result.plan
+        logger.info(
+            "[1/6] Plan generated — branch: %s, %d steps",
+            plan.branch_name, len(plan.steps),
+        )
+        for i, step in enumerate(plan.steps, 1):
+            logger.info("  Step %d: %s", i, step.description)
 
         # 2. Environment setup
+        logger.info("[2/6] Setting up environment...")
         clone_path = Path(mkdtemp(prefix="komyt-"))
         env = await self._env_manager.setup(plan, clone_path)
+        logger.info(
+            "[2/6] Environment ready — container: %s, language: %s, repo: %s",
+            env.container_id[:12] if env.container_id else "local",
+            env.language,
+            env.repo_path,
+        )
+        if env.test_command:
+            logger.info("  Test command: %s", env.test_command)
+        if env.lint_command:
+            logger.info("  Lint command: %s", env.lint_command)
+        if env.build_command:
+            logger.info("  Build command: %s", env.build_command)
 
         try:
             # 3. Dev loop
+            logger.info("[3/6] Starting development loop...")
             opencode = OpenCodeClient(
                 backend=self._opencode_backend,
                 model=self._config.opencode.default_model,
@@ -120,27 +153,38 @@ class Orchestrator:
                 git_ops=git_ops, test_runner=test_runner,
             )
             loop_result = await loop.run(plan, env)
+            logger.info(
+                "[3/6] Dev loop complete — %d/%d steps succeeded, %d tokens used",
+                loop_result.completed_count, len(plan.steps), loop_result.total_tokens,
+            )
 
             # 4. Docs update
+            logger.info("[4/6] Updating documentation...")
             docs_updater = DocsUpdater(opencode=opencode, git_ops=git_ops)
             await docs_updater.update(plan, env)
 
             # 5. Push & create PR
+            logger.info("[5/6] Pushing and creating PR...")
             pr_url: str | None = None
             has_diff = bool(git_ops.get_log(max_count=1)) and git_ops.repo.git.rev_list(
                 f"{env.base_branch}..HEAD", count=True,
             ) != "0"
             if loop_result.completed_count > 0 and has_diff:
+                logger.info("[5/6] Diff detected — pushing to remote")
                 git_ops.push()
                 repo_slug = _extract_repo_slug(ticket.repo_url)
                 pr_result = await self._pr_creator.create(plan, loop_result, repo_slug)
                 pr_url = pr_result.url
+                logger.info("[5/6] PR created: %s", pr_url)
             elif loop_result.completed_count > 0:
-                logger.warning("Steps completed but no diff with base branch — skipping PR")
+                logger.warning("[5/6] Steps completed but no diff with base branch — skipping PR")
+            else:
+                logger.warning("[5/6] No steps completed — skipping PR")
 
             await opencode.close()
 
             # 6. Report
+            logger.info("[6/6] Building report...")
             duration = time.monotonic() - start
             report = self._reporter.build_report(
                 plan, loop_result, pr_url=pr_url, duration_seconds=duration,
@@ -150,13 +194,20 @@ class Orchestrator:
                 ticket.external_id, report.comment_body,
             )
 
+            logger.info("=" * 60)
             logger.info(
-                "Pipeline completed for %s — status: %s",
+                "PIPELINE COMPLETE — %s — status: %s, tokens: %d, duration: %.1fs",
                 ticket.id, report.pipeline_result.status.value,
+                report.pipeline_result.total_tokens, duration,
             )
+            if pr_url:
+                logger.info("PR: %s", pr_url)
+            logger.info("=" * 60)
             return report.pipeline_result
 
         finally:
+            logger.info("Cleaning up environment (container: %s)...",
+                        env.container_id[:12] if env.container_id else "local")
             self._env_manager.teardown(env)
 
     async def poll_and_process(self) -> list[PipelineResult]:
@@ -166,6 +217,7 @@ class Orchestrator:
         )
 
         tickets = await self._ticket_adapter.fetch_tickets(filters)
+        logger.info("Polled %d ticket(s)", len(tickets))
         results: list[PipelineResult] = []
 
         for ticket in tickets:

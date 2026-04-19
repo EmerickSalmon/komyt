@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import sys
 from datetime import datetime
@@ -11,6 +12,7 @@ from pathlib import Path
 
 import typer
 from rich.console import Console
+from rich.logging import RichHandler
 from rich.table import Table
 
 from komyt.core.config import DEFAULT_CONFIG_FILENAME, KomytConfig, load_config, save_config
