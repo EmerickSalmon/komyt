@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 
 AGENT_INSTRUCTION_FILES = ("AGENTS.md", "CLAUDE.md", ".cursorrules", "CONVENTIONS.md")
 
+CONTAINER_WORK_DIR = "/workspace"
+
 
 class EnvironmentManager:
     """Sets up and manages isolated development environments for tickets."""
@@ -49,6 +51,7 @@ class EnvironmentManager:
         container_id = self._docker.create_environment(
             image=stack.docker_image,
             repo_path=str(clone_path),
+            working_dir=CONTAINER_WORK_DIR,
         )
 
         health = await self._health_check(container_id, stack)
@@ -58,6 +61,7 @@ class EnvironmentManager:
         env = DevEnvironment(
             container_id=container_id,
             repo_path=str(clone_path),
+            container_work_dir=CONTAINER_WORK_DIR,
             branch_name=plan.branch_name,
             base_branch=plan.ticket.repo_branch,
             language=stack.language,
@@ -82,7 +86,7 @@ class EnvironmentManager:
         self, env: DevEnvironment, command: str,
     ) -> ExecResult:
         return self._docker.exec_command(
-            env.container_id, command, working_dir=env.repo_path,
+            env.container_id, command, working_dir=env.exec_cwd,
         )
 
     def teardown(self, env: DevEnvironment) -> None:

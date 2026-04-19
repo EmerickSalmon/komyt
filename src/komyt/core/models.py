@@ -201,6 +201,7 @@ class DevEnvironment:
 
     container_id: str = ""
     repo_path: str = ""
+    container_work_dir: str = ""
     branch_name: str = ""
     base_branch: str = "main"
     language: str = ""
@@ -209,6 +210,15 @@ class DevEnvironment:
     lint_command: str | None = None
     build_command: str | None = None
     agent_instructions: str | None = None
+
+    @property
+    def exec_cwd(self) -> str:
+        """Working directory to use for `docker exec` / subprocess.
+
+        For Docker mode, this is the in-container mount path (e.g. /workspace).
+        For local mode, this falls back to the host repo path.
+        """
+        return self.container_work_dir or self.repo_path
 
 
 @dataclass

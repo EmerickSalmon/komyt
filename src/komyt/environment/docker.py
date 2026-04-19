@@ -96,10 +96,24 @@ class DockerManager:
         result = self._client.exec_in_container(
             container_id, command, working_dir=working_dir,
         )
-        if not result.success:
+        if result.success:
+            logger.debug(
+                "Command OK (exit=0) in %s: %s\n--- stdout ---\n%s\n--- stderr ---\n%s",
+                container_id[:12], command,
+                _truncate(result.stdout), _truncate(result.stderr),
+            )
+        else:
+            hint = ""
+            if not result.stdout and not result.stderr:
+                hint = (
+                    " [no output captured — likely the binary is missing from the image "
+                    "or the container exited before the command ran]"
+                )
             logger.warning(
-                "Command failed (exit=%d) in %s: %s",
-                result.exit_code, container_id[:12], command,
+                "Command failed (exit=%d) in %s: %s%s\n--- stdout ---\n%s\n--- stderr ---\n%s",
+                result.exit_code, container_id[:12], command, hint,
+                _truncate(result.stdout) or "(empty)",
+                _truncate(result.stderr) or "(empty)",
             )
         return result
 
@@ -125,3 +139,15 @@ class DockerManager:
     def pull_image(self, image: str) -> None:
         logger.info("Pulling image %s", image)
         self._client.pull_image(image)
+
+
+_LOG_OUTPUT_MAX = 4000
+
+
+def _truncate(text: str) -> str:
+    if not text:
+        return ""
+    if len(text) <= _LOG_OUTPUT_MAX:
+        return text
+    half = _LOG_OUTPUT_MAX // 2
+    return f"{text[:half]}\n... [truncated {len(text) - _LOG_OUTPUT_MAX} chars] ...\n{text[-half:]}"

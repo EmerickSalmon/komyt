@@ -45,11 +45,18 @@ class TestRunner:
         result = self._docker.exec_command(container_id, test_command, working_dir)
         report = _parse_test_output(result)
 
-        logger.info(
-            "Tests %s: %d total, %d failures, %d errors",
-            "PASSED" if report.passed else "FAILED",
-            report.total, report.failures, report.errors,
-        )
+        if report.all_passed:
+            logger.info(
+                "Tests PASSED: %d total, %d failures, %d errors (%s)",
+                report.total, report.failures, report.errors, report.summary or "no summary",
+            )
+        else:
+            logger.warning(
+                "Tests FAILED: %d total, %d failures, %d errors (%s)\n--- test output ---\n%s",
+                report.total, report.failures, report.errors,
+                report.summary or "no summary",
+                _truncate(report.output) or "(empty)",
+            )
         return report
 
     def run_lint(
@@ -59,7 +66,16 @@ class TestRunner:
         working_dir: str | None = None,
     ) -> ExecResult:
         logger.info("Running lint in %s: %s", container_id[:12], lint_command)
-        return self._docker.exec_command(container_id, lint_command, working_dir)
+        result = self._docker.exec_command(container_id, lint_command, working_dir)
+        if result.success:
+            logger.info("Lint PASSED: %s", lint_command)
+        else:
+            logger.warning(
+                "Lint FAILED (exit=%d): %s\n--- output ---\n%s",
+                result.exit_code, lint_command,
+                _truncate((result.stdout + result.stderr).strip()) or "(empty)",
+            )
+        return result
 
     def run_build(
         self,
@@ -68,7 +84,28 @@ class TestRunner:
         working_dir: str | None = None,
     ) -> ExecResult:
         logger.info("Running build in %s: %s", container_id[:12], build_command)
-        return self._docker.exec_command(container_id, build_command, working_dir)
+        result = self._docker.exec_command(container_id, build_command, working_dir)
+        if result.success:
+            logger.info("Build PASSED: %s", build_command)
+        else:
+            logger.warning(
+                "Build FAILED (exit=%d): %s\n--- output ---\n%s",
+                result.exit_code, build_command,
+                _truncate((result.stdout + result.stderr).strip()) or "(empty)",
+            )
+        return result
+
+
+_LOG_OUTPUT_MAX = 4000
+
+
+def _truncate(text: str) -> str:
+    if not text:
+        return ""
+    if len(text) <= _LOG_OUTPUT_MAX:
+        return text
+    half = _LOG_OUTPUT_MAX // 2
+    return f"{text[:half]}\n... [truncated {len(text) - _LOG_OUTPUT_MAX} chars] ...\n{text[-half:]}"
 
 
 def _parse_test_output(result: ExecResult) -> TestReport:

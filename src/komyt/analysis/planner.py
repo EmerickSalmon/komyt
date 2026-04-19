@@ -72,6 +72,7 @@ class DevPlanner:
             constraints=constraints_text,
         )
 
+        logger.debug("Planner prompt (%d chars):\n%s", len(prompt), prompt)
         raw = await self._llm.complete(prompt)
         data = _parse_json(raw)
 
@@ -103,7 +104,7 @@ class DevPlanner:
 
 def _parse_json(raw: str) -> dict:  # type: ignore[type-arg]
     from komyt.analysis.contract import _parse_json as _robust_parse
-    return _robust_parse(raw)
+    return _robust_parse(raw, context="planner")
 
 
 def _generate_branch_name(ticket: TicketData, contract: TicketContract) -> str:

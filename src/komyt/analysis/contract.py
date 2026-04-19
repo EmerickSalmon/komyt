@@ -88,14 +88,7 @@ class ContractExtractor:
 
         logger.debug("Contract extraction prompt (%d chars):\n%s", len(prompt), prompt)
         raw = await self._llm.complete(prompt)
-        logger.debug("Contract extraction raw LLM response (%d chars):\n%s", len(raw), raw)
-        try:
-            data = _parse_json(raw)
-        except json.JSONDecodeError:
-            logger.warning(
-                "Failed to parse LLM response as JSON. Full raw response:\n%s", raw
-            )
-            raise
+        data = _parse_json(raw, context="contract")
         contract = _build_contract(data)
 
         filled = _get_filled_fields(contract)
@@ -125,7 +118,9 @@ class ContractExtractor:
         )
 
 
-def _parse_json(raw: str) -> dict:  # type: ignore[type-arg]
+def _parse_json(raw: str, context: str = "llm") -> dict:  # type: ignore[type-arg]
+    logger.debug("%s raw LLM response (%d chars):\n%s", context, len(raw), raw)
+
     cleaned = raw.strip()
     # Strip <think>...</think> blocks (Qwen, DeepSeek, etc.)
     cleaned = re.sub(r"<think>.*?</think>", "", cleaned, flags=re.DOTALL).strip()
@@ -158,6 +153,10 @@ def _parse_json(raw: str) -> dict:  # type: ignore[type-arg]
         except json.JSONDecodeError:
             pass
 
+    logger.warning(
+        "%s — failed to parse JSON from LLM response. Full raw response:\n%s",
+        context, raw,
+    )
     raise json.JSONDecodeError("No valid JSON found in LLM response", raw[:200], 0)
 
 

@@ -42,6 +42,7 @@ class LocalEnvironmentManager:
         env = DevEnvironment(
             container_id="local",
             repo_path=str(clone_path),
+            container_work_dir=str(clone_path),
             branch_name=plan.branch_name,
             base_branch=plan.ticket.repo_branch,
             language=stack.language,

@@ -152,21 +152,21 @@ class DevelopmentLoop:
 
         if env.test_command:
             report = self._test_runner.run_tests(
-                env.container_id, env.test_command, env.repo_path,
+                env.container_id, env.test_command, env.exec_cwd,
             )
             if not report.passed:
                 errors.append(f"Tests failed: {report.summary}")
 
         if env.lint_command:
             lint_result = self._test_runner.run_lint(
-                env.container_id, env.lint_command, env.repo_path,
+                env.container_id, env.lint_command, env.exec_cwd,
             )
             if not lint_result.success:
                 errors.append(f"Lint failed: {lint_result.stderr[:200]}")
 
         if env.build_command:
             build_result = self._test_runner.run_build(
-                env.container_id, env.build_command, env.repo_path,
+                env.container_id, env.build_command, env.exec_cwd,
             )
             if not build_result.success:
                 errors.append(f"Build failed: {build_result.stderr[:200]}")
