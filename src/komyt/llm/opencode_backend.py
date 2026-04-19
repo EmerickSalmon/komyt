@@ -52,11 +52,14 @@ class LLMOpenCodeBackend:
         self._client = httpx.AsyncClient(timeout=180.0)
         self._sessions: dict[str, dict[str, str]] = {}
 
-    async def create_session(self, working_dir: str, model: str) -> str:
+    async def create_session(
+        self, working_dir: str, model: str, container_id: str = "",
+    ) -> str:
         session_id = uuid.uuid4().hex[:12]
         self._sessions[session_id] = {
             "working_dir": working_dir,
             "model": model or self._model,
+            "container_id": container_id,
         }
         return session_id
 

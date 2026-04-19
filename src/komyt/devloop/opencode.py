@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Protocol
 
 logger = logging.getLogger(__name__)
@@ -41,7 +41,9 @@ class OpenCodeBackend(Protocol):
 
     async def send_message(self, session_id: str, message: str) -> CompletionResult: ...
 
-    async def create_session(self, working_dir: str, model: str) -> str: ...
+    async def create_session(
+        self, working_dir: str, model: str, container_id: str = "",
+    ) -> str: ...
 
     async def close_session(self, session_id: str) -> None: ...
 
@@ -73,9 +75,14 @@ class OpenCodeClient:
     def budget_exhausted(self) -> bool:
         return self._usage.total_tokens >= self._max_tokens
 
-    async def start_session(self, working_dir: str) -> str:
-        self._session_id = await self._backend.create_session(working_dir, self._model)
-        logger.info("OpenCode session started: %s (model=%s)", self._session_id, self._model)
+    async def start_session(self, working_dir: str, container_id: str = "") -> str:
+        self._session_id = await self._backend.create_session(
+            working_dir, self._model, container_id=container_id,
+        )
+        logger.info(
+            "OpenCode session started: %s (model=%s, container=%s)",
+            self._session_id, self._model, container_id[:12] or "n/a",
+        )
         return self._session_id
 
     async def send(self, prompt: str) -> CompletionResult:

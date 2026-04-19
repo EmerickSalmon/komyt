@@ -6,7 +6,6 @@ import asyncio
 import json
 import logging
 import os
-import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -15,7 +14,7 @@ from rich.console import Console
 from rich.logging import RichHandler
 from rich.table import Table
 
-from komyt.core.config import DEFAULT_CONFIG_FILENAME, KomytConfig, load_config, save_config
+from komyt.core.config import DEFAULT_CONFIG_FILENAME, KomytConfig, load_config
 
 app = typer.Typer(
     name="komyt",
@@ -270,6 +269,32 @@ def config_cmd(
 # Async helpers
 # ---------------------------------------------------------------------------
 
+def _create_opencode_backend(cfg: KomytConfig, docker_client):  # type: ignore[no-untyped-def]
+    """Pick the opencode backend based on config.
+
+    CLI mode runs the real ``opencode run`` binary inside the dev container
+    (requires the ``komyt-python`` image — see docker/komyt-python/Dockerfile).
+    HTTP mode falls back to calling an OpenAI-compatible chat completions
+    endpoint and parsing file blocks out of the text (legacy behaviour, kept
+    for running without Docker).
+    """
+    if cfg.opencode.use_cli:
+        if not cfg.docker.enabled:
+            console.print(
+                "[red]Error:[/] opencode.use_cli=true requires docker.enabled=true "
+                "(the CLI runs inside the container)."
+            )
+            raise typer.Exit(code=1)
+        from komyt.environment.docker import DockerManager
+        from komyt.llm.opencode_cli_backend import OpenCodeCLIBackend
+
+        docker_mgr = DockerManager(config=cfg.docker, client=docker_client)
+        return OpenCodeCLIBackend(docker_manager=docker_mgr, config=cfg.opencode)
+
+    from komyt.llm.opencode_backend import LLMOpenCodeBackend
+    return LLMOpenCodeBackend(cfg.opencode)
+
+
 def _create_docker_client(cfg: KomytConfig):  # type: ignore[no-untyped-def]
     if not cfg.docker.enabled:
         from komyt.environment.local import LocalDockerClient
@@ -280,7 +305,7 @@ def _create_docker_client(cfg: KomytConfig):  # type: ignore[no-untyped-def]
     except Exception as exc:
         console.print(f"[red]Docker unavailable:[/] {exc}")
         console.print("[dim]Set docker.enabled = false in komyt.toml to run without Docker.[/]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from exc
 
 
 def _resolve_github_token(cfg: KomytConfig) -> str:
@@ -353,17 +378,15 @@ async def _run_ticket(ticket_url: str, cfg: KomytConfig) -> None:
     from komyt.core.orchestrator import Orchestrator
     from komyt.ingestion.github import GitHubTicketAdapter
     from komyt.llm.anthropic import create_llm_client
-    from komyt.llm.opencode_backend import LLMOpenCodeBackend
-    from komyt.utils.github_url import parse_github_issue_url
 
     ticket, parsed = await _fetch_ticket(cfg, ticket_url)
 
     token = cfg.github.token
     llm = create_llm_client(cfg.opencode)
-    opencode_backend = LLMOpenCodeBackend(cfg.opencode)
     git_platform = GitHubPlatformAdapter(token)
 
     docker_client = _create_docker_client(cfg)
+    opencode_backend = _create_opencode_backend(cfg, docker_client)
 
     console.print(f"  LLM: [dim]{cfg.opencode.default_model} @ {cfg.opencode.server_url}[/]")
     if not cfg.docker.enabled:
@@ -388,7 +411,7 @@ async def _run_ticket(ticket_url: str, cfg: KomytConfig) -> None:
             await llm.close()
             await opencode_backend.close()
             await git_platform.close()
-            raise typer.Exit(code=1)
+            raise typer.Exit(code=1) from exc
 
     await llm.close()
     await opencode_backend.close()
@@ -425,7 +448,6 @@ async def _daemon_loop(cfg: KomytConfig) -> None:
     from komyt.core.orchestrator import Orchestrator
     from komyt.ingestion.github import GitHubTicketAdapter
     from komyt.llm.anthropic import create_llm_client
-    from komyt.llm.opencode_backend import LLMOpenCodeBackend
 
     _resolve_github_token(cfg)
 
@@ -443,9 +465,9 @@ async def _daemon_loop(cfg: KomytConfig) -> None:
     signal.signal(signal.SIGINT, _stop)
 
     llm = create_llm_client(cfg.opencode)
-    opencode_backend = LLMOpenCodeBackend(cfg.opencode)
     git_platform = GitHubPlatformAdapter(cfg.github.token)
     docker_client = _create_docker_client(cfg)
+    opencode_backend = _create_opencode_backend(cfg, docker_client)
 
     org = cfg.github.default_org
     console.print(f"\n[dim]Polling {org} every {cfg.github.poll_interval_seconds}s...[/]")

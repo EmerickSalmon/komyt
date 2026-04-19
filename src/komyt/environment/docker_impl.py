@@ -26,6 +26,7 @@ class RealDockerClient:
         nano_cpus: int | None = None,
         working_dir: str | None = None,
         detach: bool = True,
+        environment: dict[str, str] | None = None,
     ) -> str:
         kwargs: dict[str, object] = {
             "image": image,
@@ -43,6 +44,8 @@ class RealDockerClient:
             kwargs["nano_cpus"] = nano_cpus
         if working_dir:
             kwargs["working_dir"] = working_dir
+        if environment:
+            kwargs["environment"] = environment
 
         try:
             container = self._docker.containers.create(**kwargs)

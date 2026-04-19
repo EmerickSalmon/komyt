@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 
 from komyt.adapters.git.base import GitPlatformAdapter, PRData, PRResult
-from komyt.core.models import DevelopmentPlan, TicketData, TicketType
+from komyt.core.models import DevelopmentPlan, TicketType
 from komyt.devloop.loop import LoopResult
 
 logger = logging.getLogger(__name__)
@@ -57,6 +57,19 @@ def _build_pr_title(plan: DevelopmentPlan) -> str:
 
 def _build_pr_body(plan: DevelopmentPlan, loop_result: LoopResult) -> str:
     parts: list[str] = []
+
+    if loop_result.failed_count > 0:
+        failed_titles = [
+            s.description for s, r in zip(plan.steps, loop_result.steps, strict=False)
+            if r.status.value == "failed"
+        ]
+        bullets = "\n".join(f"  - {t}" for t in failed_titles) or "  - (see commits)"
+        parts.append(
+            f"> ⚠️ **Human review needed** — {loop_result.failed_count} step(s) "
+            f"did not pass verification. WIP commits were pushed so the work "
+            f"isn't lost, but the following steps still need a developer:\n"
+            f"{bullets}\n"
+        )
 
     parts.append(f"## Summary\n{plan.contract.objective}")
     parts.append(f"\nCloses #{plan.ticket.external_id}")

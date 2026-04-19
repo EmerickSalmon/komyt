@@ -13,7 +13,7 @@ from komyt.analysis.engine import AnalysisEngine
 from komyt.core.config import KomytConfig
 from komyt.core.models import PipelineResult, TaskStatus, TicketData
 from komyt.devloop.loop import DevelopmentLoop
-from komyt.devloop.opencode import OpenCodeClient, OpenCodeBackend
+from komyt.devloop.opencode import OpenCodeBackend, OpenCodeClient
 from komyt.devloop.testing import TestRunner
 from komyt.environment.docker import DockerClient, DockerManager
 from komyt.environment.git_ops import GitOperations
@@ -61,6 +61,8 @@ class Orchestrator:
             self._env_manager = EnvironmentManager(
                 docker_config=config.docker, docker_client=docker_client,
                 github_token=github_token,
+                container_env=_build_container_env(),
+                python_image=config.opencode.python_image,
             )
         self._reporter = Reporter()
         self._pr_creator = PRCreator(platform=git_platform)
@@ -140,7 +142,7 @@ class Orchestrator:
                 model=self._config.opencode.default_model,
                 max_tokens=self._config.opencode.max_tokens_per_task,
             )
-            await opencode.start_session(env.repo_path)
+            await opencode.start_session(env.repo_path, container_id=env.container_id)
 
             git_ops = GitOperations(Path(env.repo_path))
             docker_mgr = DockerManager(
@@ -152,6 +154,7 @@ class Orchestrator:
                 opencode=opencode, docker=docker_mgr,
                 git_ops=git_ops, test_runner=test_runner,
                 stop_on_step_failure=self._config.opencode.stop_on_step_failure,
+                skip_validation=self._config.opencode.skip_validation,
             )
             loop_result = await loop.run(plan, env)
             logger.info(
@@ -170,17 +173,21 @@ class Orchestrator:
             has_diff = bool(git_ops.get_log(max_count=1)) and git_ops.repo.git.rev_list(
                 f"{env.base_branch}..HEAD", count=True,
             ) != "0"
-            if loop_result.completed_count > 0 and has_diff:
+            if has_diff:
+                if loop_result.failed_count > 0:
+                    logger.warning(
+                        "[5/6] %d step(s) failed verification — opening PR anyway "
+                        "so a human can pick up the WIP commits",
+                        loop_result.failed_count,
+                    )
                 logger.info("[5/6] Diff detected — pushing to remote")
                 git_ops.push()
                 repo_slug = _extract_repo_slug(ticket.repo_url)
                 pr_result = await self._pr_creator.create(plan, loop_result, repo_slug)
                 pr_url = pr_result.url
                 logger.info("[5/6] PR created: %s", pr_url)
-            elif loop_result.completed_count > 0:
-                logger.warning("[5/6] Steps completed but no diff with base branch — skipping PR")
             else:
-                logger.warning("[5/6] No steps completed — skipping PR")
+                logger.warning("[5/6] No diff with base branch — skipping PR")
 
             await opencode.close()
 
@@ -233,6 +240,23 @@ class Orchestrator:
             results.append(result)
 
         return results
+
+
+def _build_container_env() -> dict[str, str]:
+    """Passthrough of secrets opencode needs once it runs inside the container.
+
+    We only forward what's actually set in the host env to avoid silently
+    injecting empty values that would mask missing-credential errors.
+    """
+    import os
+
+    keys = (
+        "ANTHROPIC_API_KEY",
+        "OPENAI_API_KEY",
+        "OPENCODE_API_KEY",
+        "GITHUB_TOKEN",
+    )
+    return {k: os.environ[k] for k in keys if os.environ.get(k)}
 
 
 def _extract_repo_slug(repo_url: str) -> str:

@@ -36,6 +36,7 @@ class DockerClient(Protocol):
         nano_cpus: int | None = None,
         working_dir: str | None = None,
         detach: bool = True,
+        environment: dict[str, str] | None = None,
     ) -> str: ...
 
     def start_container(self, container_id: str) -> None: ...
@@ -65,6 +66,7 @@ class DockerManager:
         image: str | None = None,
         repo_path: str | None = None,
         working_dir: str = "/workspace",
+        environment: dict[str, str] | None = None,
     ) -> str:
         img = image or self._config.default_image
         volumes: dict[str, dict[str, str]] | None = None
@@ -80,6 +82,7 @@ class DockerManager:
             nano_cpus=nano_cpus,
             working_dir=working_dir,
             detach=True,
+            environment=environment,
         )
 
         self._client.start_container(container_id)

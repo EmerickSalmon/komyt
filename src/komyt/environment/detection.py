@@ -39,7 +39,7 @@ _LANGUAGE_MARKERS: list[tuple[str, str]] = [
 ]
 
 _DOCKER_IMAGES: dict[str, str] = {
-    "python": "python:3.12-slim",
+    "python": "komyt-python:latest",
     "node": "node:20-slim",
     "go": "golang:1.22-bookworm",
     "rust": "rust:1.78-slim",

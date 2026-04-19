@@ -6,14 +6,19 @@ import logging
 from dataclasses import dataclass, field
 
 from komyt.core.models import (
-    DevEnvironment,
     DevelopmentPlan,
+    DevEnvironment,
     DevStep,
     StepResult,
     StepStatus,
 )
 from komyt.devloop.opencode import OpenCodeClient, TokenBudgetExceeded
-from komyt.devloop.prompts import build_commit_message, build_retry_prompt, build_step_prompt
+from komyt.devloop.prompts import (
+    build_commit_message,
+    build_failed_commit_message,
+    build_retry_prompt,
+    build_step_prompt,
+)
 from komyt.devloop.testing import TestRunner
 from komyt.environment.docker import DockerManager
 from komyt.environment.git_ops import GitOperations
@@ -65,12 +70,14 @@ class DevelopmentLoop:
         git_ops: GitOperations,
         test_runner: TestRunner,
         stop_on_step_failure: bool = True,
+        skip_validation: bool = False,
     ) -> None:
         self._opencode = opencode
         self._docker = docker
         self._git = git_ops
         self._test_runner = test_runner
         self._stop_on_step_failure = stop_on_step_failure
+        self._skip_validation = skip_validation
 
     async def run(
         self,
@@ -113,7 +120,8 @@ class DevelopmentLoop:
                     )
                     break
                 logger.warning(
-                    "Step '%s' failed after %d attempts — continuing to next step",
+                    "Step '%s' failed after %d attempts — committed WIP and "
+                    "continuing so the PR captures the attempt",
                     step.description, step.attempt_count,
                 )
 
@@ -165,15 +173,37 @@ class DevelopmentLoop:
                 attempt, step.max_attempts, "; ".join(errors[:2]),
             )
 
+        last_error = step.error_log[-1] if step.error_log else ""
+        wip_msg = build_failed_commit_message(step, plan, last_error)
+        wip_sha = self._git.commit(wip_msg)
+        if wip_sha:
+            logger.warning(
+                "Committed WIP for failed step '%s' (sha=%s) — human follow-up needed",
+                step.description, wip_sha[:8],
+            )
+        else:
+            logger.warning(
+                "Step '%s' failed and produced no diff to commit",
+                step.description,
+            )
+
         step.status = StepStatus.FAILED
         return StepResult(
             status=StepStatus.FAILED,
             attempt=step.max_attempts,
             errors=step.error_log,
+            files_changed=self._get_changed_files() if wip_sha else [],
+            commit_sha=wip_sha,
         )
 
     async def _validate_step(self, env: DevEnvironment) -> list[str]:
         errors: list[str] = []
+
+        if self._skip_validation:
+            logger.info(
+                "Validation skipped (skip_validation=true) — accepting step output as-is",
+            )
+            return errors
 
         if env.test_command:
             report = self._test_runner.run_tests(
