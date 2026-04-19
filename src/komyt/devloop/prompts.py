@@ -51,15 +51,24 @@ def build_retry_prompt(
 ) -> str:
     original = build_step_prompt(step, plan, env)
 
-    error_text = "\n".join(f"- {e}" for e in errors)
+    error_blocks = "\n\n".join(
+        f"### Failure {i}\n```\n{e}\n```" for i, e in enumerate(errors, 1)
+    )
 
     return (
         f"{original}\n\n"
         f"---\n"
         f"## Retry (attempt {attempt}/{step.max_attempts})\n\n"
-        f"The previous attempt failed with the following errors:\n{error_text}\n\n"
-        f"Please fix these issues. Focus on the errors above and make minimal "
-        f"changes to resolve them."
+        f"The previous attempt failed. Below is the verbatim output from the "
+        f"failing tests/lint/build. Read the tracebacks and error messages "
+        f"carefully — they name the exact files, lines and reasons. Only "
+        f"produce file blocks that fix these specific errors. Do not include "
+        f"markdown fences, prose, or unrelated changes inside the file blocks.\n\n"
+        f"{error_blocks}\n\n"
+        f"Fix the root cause shown above. If a file you previously wrote "
+        f"contains non-Python content (e.g. markdown separators like `---`, "
+        f"prose, or code fences), rewrite it as valid source code for "
+        f"`{env.language}`."
     )
 
 

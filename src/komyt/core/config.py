@@ -26,6 +26,7 @@ class OpenCodeConfig:
     default_model: str = "claude-sonnet-4-6"
     max_tokens_per_task: int = 500_000
     max_retries_per_step: int = 5
+    stop_on_step_failure: bool = True
 
 
 @dataclass
@@ -132,6 +133,9 @@ def load_config(config_path: Path | None = None) -> KomytConfig:
     config.opencode.max_retries_per_step = oc.get(
         "max_retries_per_step", config.opencode.max_retries_per_step
     )
+    config.opencode.stop_on_step_failure = oc.get(
+        "stop_on_step_failure", config.opencode.stop_on_step_failure
+    )
 
     # GitHub
     gh = raw.get("github", {})
@@ -190,6 +194,7 @@ def save_config(config: KomytConfig, path: Path) -> None:
             "default_model": config.opencode.default_model,
             "max_tokens_per_task": config.opencode.max_tokens_per_task,
             "max_retries_per_step": config.opencode.max_retries_per_step,
+            "stop_on_step_failure": config.opencode.stop_on_step_failure,
         },
         "github": {
             "token": config.github.token,

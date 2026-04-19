@@ -20,6 +20,17 @@ from komyt.environment.git_ops import GitOperations
 
 logger = logging.getLogger(__name__)
 
+_ERROR_OUTPUT_MAX = 3000
+
+
+def _truncate_output(text: str) -> str:
+    """Keep errors readable in the retry prompt without blowing the token budget."""
+    text = text.strip()
+    if len(text) <= _ERROR_OUTPUT_MAX:
+        return text
+    half = _ERROR_OUTPUT_MAX // 2
+    return f"{text[:half]}\n... [truncated {len(text) - _ERROR_OUTPUT_MAX} chars] ...\n{text[-half:]}"
+
 
 @dataclass
 class LoopResult:
@@ -53,11 +64,13 @@ class DevelopmentLoop:
         docker: DockerManager,
         git_ops: GitOperations,
         test_runner: TestRunner,
+        stop_on_step_failure: bool = True,
     ) -> None:
         self._opencode = opencode
         self._docker = docker
         self._git = git_ops
         self._test_runner = test_runner
+        self._stop_on_step_failure = stop_on_step_failure
 
     async def run(
         self,
@@ -87,6 +100,18 @@ class DevelopmentLoop:
             result.steps.append(step_result)
 
             if step_result.status == StepStatus.FAILED:
+                if self._stop_on_step_failure:
+                    logger.warning(
+                        "Step '%s' failed after %d attempts — aborting pipeline "
+                        "(stop_on_step_failure=true)",
+                        step.description, step.attempt_count,
+                    )
+                    result.aborted = True
+                    result.abort_reason = (
+                        f"Step '{step.description}' failed after "
+                        f"{step.attempt_count} attempts"
+                    )
+                    break
                 logger.warning(
                     "Step '%s' failed after %d attempts — continuing to next step",
                     step.description, step.attempt_count,
@@ -155,21 +180,37 @@ class DevelopmentLoop:
                 env.container_id, env.test_command, env.exec_cwd,
             )
             if not report.passed:
-                errors.append(f"Tests failed: {report.summary}")
+                detail = _truncate_output(report.output) or report.summary
+                errors.append(
+                    f"Tests failed (command: `{env.test_command}`, "
+                    f"summary: {report.summary}):\n{detail}"
+                )
 
         if env.lint_command:
             lint_result = self._test_runner.run_lint(
                 env.container_id, env.lint_command, env.exec_cwd,
             )
             if not lint_result.success:
-                errors.append(f"Lint failed: {lint_result.stderr[:200]}")
+                output = _truncate_output(
+                    (lint_result.stdout + "\n" + lint_result.stderr).strip()
+                ) or "(no output captured)"
+                errors.append(
+                    f"Lint failed (command: `{env.lint_command}`, "
+                    f"exit={lint_result.exit_code}):\n{output}"
+                )
 
         if env.build_command:
             build_result = self._test_runner.run_build(
                 env.container_id, env.build_command, env.exec_cwd,
             )
             if not build_result.success:
-                errors.append(f"Build failed: {build_result.stderr[:200]}")
+                output = _truncate_output(
+                    (build_result.stdout + "\n" + build_result.stderr).strip()
+                ) or "(no output captured)"
+                errors.append(
+                    f"Build failed (command: `{env.build_command}`, "
+                    f"exit={build_result.exit_code}):\n{output}"
+                )
 
         return errors
 

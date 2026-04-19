@@ -151,6 +151,7 @@ class Orchestrator:
             loop = DevelopmentLoop(
                 opencode=opencode, docker=docker_mgr,
                 git_ops=git_ops, test_runner=test_runner,
+                stop_on_step_failure=self._config.opencode.stop_on_step_failure,
             )
             loop_result = await loop.run(plan, env)
             logger.info(
